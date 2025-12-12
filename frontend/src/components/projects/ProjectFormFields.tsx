@@ -48,10 +48,13 @@ export function ProjectFormFields({
   const [reposError, setReposError] = useState('');
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [showRecentRepos, setShowRecentRepos] = useState(false);
+  const [loadingDuration, setLoadingDuration] = useState(0);
+  const [hasSearched, setHasSearched] = useState(false);
 
   const loadRecentRepos = useCallback(async () => {
     setLoading(true);
     setReposError('');
+    setLoadingDuration(0);
 
     try {
       const discoveredRepos = await fileSystemApi.listGitRepos();
@@ -61,15 +64,29 @@ export function ProjectFormFields({
       console.error('Failed to load repos:', err);
     } finally {
       setLoading(false);
+      setHasSearched(true);
     }
   }, []);
 
   // Lazy-load repositories when the user navigates to the repo list
   useEffect(() => {
-    if (showRecentRepos && !loading && allRepos.length === 0) {
+    if (showRecentRepos && !loading && allRepos.length === 0 && !hasSearched) {
       loadRecentRepos();
     }
-  }, [showRecentRepos, loading, allRepos.length, loadRecentRepos]);
+  }, [showRecentRepos, loading, allRepos.length, hasSearched, loadRecentRepos]);
+
+  // Track loading duration to show timeout message
+  useEffect(() => {
+    if (!loading) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setLoadingDuration((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [loading]);
 
   return (
     <>
@@ -193,9 +210,17 @@ export function ProjectFormFields({
                     <div className="flex items-center gap-3">
                       <div className="animate-spin h-5 w-5 border-2 border-muted-foreground border-t-transparent rounded-full"></div>
                       <div className="text-sm text-muted-foreground">
-                        Loading repositories...
+                        {loadingDuration < 2
+                          ? 'Searching for repositories...'
+                          : `Still searching... (${loadingDuration}s)`}
                       </div>
                     </div>
+                    {loadingDuration >= 3 && (
+                      <div className="text-xs text-muted-foreground mt-2 ml-8">
+                        This is taking longer than usual. You can browse manually
+                        below.
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -206,6 +231,23 @@ export function ProjectFormFields({
                       <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0" />
                       <div className="text-sm text-destructive">
                         {reposError}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* No repos found state */}
+                {!loading && hasSearched && allRepos.length === 0 && !reposError && (
+                  <div className="p-4 border rounded-lg bg-card">
+                    <div className="flex items-start gap-3">
+                      <Folder className="h-5 w-5 mt-0.5 flex-shrink-0 text-muted-foreground" />
+                      <div>
+                        <div className="text-sm text-muted-foreground">
+                          No repositories found in common locations.
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Use the option below to browse for a repository.
+                        </div>
                       </div>
                     </div>
                   </div>
